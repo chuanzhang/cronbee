@@ -1,9 +1,11 @@
-package org.cronbee.entry;
+package org.cronbee.config;
 
 
 import java.util.concurrent.RejectedExecutionHandler;
 
 import org.cronbee.constant.CronConstant;
+import org.cronbee.entry.RejectExceptionHandlerImpl;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.SchedulingConfigurer;
@@ -17,6 +19,10 @@ import org.springframework.scheduling.config.ScheduledTaskRegistrar;
  */
 @Configuration
 public class ScheduleConfig implements SchedulingConfigurer {
+	
+	@Autowired
+	CronConfig cronConfig;
+	
     @Override
     public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
         taskRegistrar.setScheduler(threadPoolTaskScheduler());
@@ -28,7 +34,7 @@ public class ScheduleConfig implements SchedulingConfigurer {
         ThreadPoolTaskScheduler threadPoolTaskScheduler = new ThreadPoolTaskScheduler();
         
         //设置最大线程个数
-        threadPoolTaskScheduler.setPoolSize(CronConstant.THREAD_POOL_MAX_SIZE);
+        threadPoolTaskScheduler.setPoolSize(cronConfig.getIntMaxThreadPoolSize());
         
         //设置异常处理类
         RejectedExecutionHandler rejectedExecutionHandler = new RejectExceptionHandlerImpl();

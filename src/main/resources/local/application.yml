@@ -1,0 +1,18 @@
+application.mode: local
+
+spring.http.encoding:
+  charset: UTF-8 # Charset of HTTP requests and responses. Added to the "Content-Type" header if not set explicitly.
+  enabled: true # Enable http encoding support.
+  force: true
+spring.messages.basename: i18n/messages
+spring.messages.encoding: UTF-8
+
+spring.datasource:
+  url: jdbc:mysql://localhost:3306/stock?autoReconnect=true&characterEncoding=UTF8&&parseTime=True
+  username: app
+  password: 123
+  testOnBorrow: true
+  validationQuery: "select version()"
+  driver-class-name: com.mysql.cj.jdbc.Driver
+
+cronbee.group: cron_test

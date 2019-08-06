@@ -1,6 +1,7 @@
 package org.cronbee.entry;
 
 import java.lang.reflect.Method;
+import java.net.InetAddress;
 
 import org.cronbee.constant.CronConstant;
 import org.cronbee.model.Cron;
@@ -13,29 +14,23 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 public class GeneralRunableImpl implements Runnable{
 	
-	String beanName;
-	String methodName;
+	private String taskName;
 	
-	String taskName;
+	public static CronService cronService;
 	
-	@Autowired
-	CronService cronService;
+	private Cron cron;
 	
-	Cron cron;
+	private boolean isRunning;
 	
-	boolean isRunning;
-	
-	String currentExecuteId;
+	private String currentExecuteId;
 	
 	
 	private static final Logger logger = LoggerFactory.getLogger(GeneralRunableImpl.class);
 	
-	public GeneralRunableImpl(String beanName, String methodName) {
-		this.beanName = beanName;
-		this.methodName = methodName;
-		
-		this.taskName = CronUtil.getTaskName(beanName, methodName);
-		this.cron = cronService.getCronByTaskName(this.taskName);
+	public GeneralRunableImpl(Cron cron) {
+		if(cron == null) return;
+		this.cron = cron;
+		this.taskName = CronUtil.getTaskNamebyCron(cron);
 	}
 	
 	
@@ -46,7 +41,8 @@ public class GeneralRunableImpl implements Runnable{
             return;
         }
         
-        //同一个cron不允许在同一个机器上同时执行，以尽可能避免并发问题。如果确实有这种需求，请多写几个入口方法或者自行启动子线程。
+        //同一个cron不允许在同一个机器上同时执行（往往是因为执行时间长导致重叠），以尽可能避免并发问题。
+        //如果确实有这种需求，请多写几个入口方法或者设置参数或者其他方式。
         synchronized (this) {
 			if(isRunning)return;
 			
@@ -57,6 +53,14 @@ public class GeneralRunableImpl implements Runnable{
         if(CronConstant.RUN_WAY_NONE.equals(cron.getRunWay())) {
             logger.info("task:{} is configured not to run,return",taskName );
             return;
+        }
+        
+        //判断是否配置期望运行的ip，如果不是就稍等一会
+        if(!CronUtil.isEmpty(cron.getPreferIp()) && !cron.getPreferIp().equals(CronUtil.getLocalIp())) {
+        	try {
+        		Thread.sleep(CronConstant.WAIT_TIME_IN_MILLS);
+        	}
+        	catch(Exception ex) {}
         }
         
         //插入执行记录
@@ -70,38 +74,42 @@ public class GeneralRunableImpl implements Runnable{
         				taskName);
         		return;
         	}else {
-	            logger.error("task:{} insert run history error:{}",ex.getMessage());
+	            logger.error("task:{} insert run history error:{}",ex);
         	}
         }
-        
-        
-        String status = CronConstant.CronExecuteHistoryStatus.FINISH.getCronExecuteHistoryStatus();
-        //单点运行方式
-        if(CronConstant.RUN_WAY_SINGLE.equals(cron.getRunWay())) {
-            
-            logger.info("task:{} is configured run on single point",taskName);
-        }
-        
         
 	}
 	
 	@Override
 	public void run() {
 		String runStatus = CronConstant.CronExecuteHistoryStatus.INIT.getCronExecuteHistoryStatus();
+		String message = CronConstant.MESSAGE_OK;
+		beforeRun();
 		
 		logger.info("begin run task:{}",this.taskName);
 		
 		try {
-			Object bean = ApplicationContextUtil.getApplicationContext().getBean(beanName);
+			Object bean = ApplicationContextUtil.getApplicationContext().getBean(this.cron.getBeanName());
 			
 			Class clazz = bean.getClass();
-			Method method = clazz.getDeclaredMethod(this.methodName);
-			method.invoke(bean);
+			Method method = clazz.getDeclaredMethod(this.cron.getMethodName());
+			
+			if(method.getParameterCount() == 0)method.invoke(bean);
+			else method.invoke(bean, this.cron.getParameter());
+			
 			runStatus = CronConstant.CronExecuteHistoryStatus.FINISH.getCronExecuteHistoryStatus();
 		}catch(Exception ex) {
+			
+			//赋值失败信息
 			runStatus = CronConstant.CronExecuteHistoryStatus.FAIL.getCronExecuteHistoryStatus();
+			logger.error("task:{} run error",this.taskName, ex);
+			
+			message = ex.toString();
+			if(message.length() > CronConstant.MAX_MESSAGE_LENGTH) {
+				message.substring(0, CronConstant.MAX_MESSAGE_LENGTH);
+			}
 		}finally {
-			postRun(runStatus);
+			postRun(runStatus, message);
 		}
 		
 	}
@@ -109,10 +117,11 @@ public class GeneralRunableImpl implements Runnable{
 	/**
 	 * 任务执行后的动作
 	 */
-	private void postRun(String status) {
+	private void postRun(String status, String message) {
+		
 		//更新执行状态
         try {
-            cronService.updateCronExecuteHistory(cron.getId(), this.currentExecuteId, status);
+            cronService.updateCronExecuteHistory(cron.getId(), this.currentExecuteId, status, message);
             logger.info("task:{} done.", this.taskName);
             
         }catch(Exception ex) {

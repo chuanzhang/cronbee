@@ -8,52 +8,42 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.annotation.PostConstruct;
 import javax.sql.DataSource;
 
+import org.cronbee.config.CronConfig;
 import org.cronbee.model.Cron;
 import org.cronbee.util.CronUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 @Component
 public class CronDao {
     
-    private final String SELECT_SQL = "select * from tb_cron_ini ";
-    private final String WHERE_SQL_GROUP = " where group_name=? ";
-    private final String WHERE_SQL_GROUP_NULL = " where group_name is null or group_name=''";
+    private final String SELECT_SQL = "select * from tb_cron_bee ";
+    private final String WHERE_SQL_GROUP = " where group_name=? and run_way!='none'";
+    private final String WHERE_SQL_GROUP_NULL = " where group_name is null or group_name='' and run_way!='none'";
     
-    private final String UPDATE_TIME_SQL = "update tb_cron_ini set last_run_time =? where id=?";
+    private final String UPDATE_TIME_SQL = "update tb_cron_bee set last_run_time =CURRENT_TIMESTAMP where id=?";
     
     private static final Logger logger = LoggerFactory.getLogger(CronDao.class);
     
-    private DataSource dataSource;
-    
-    public CronDao(DataSource dataSource) {
+    @Autowired
+    private CronConfig cronConfig;
 
-        this.dataSource = dataSource;
-    }
-    
-    /**
-     * 获取数据库连接
-     * 
-     * @return
-     */
-    public DataSource getDataSource() {
 
-        return dataSource;
-    }
-    
-    public void updateLastRunTime(String cronId, Timestamp lastRunTime){
+	public void updateLastRunTime(String cronId){
         
         PreparedStatement pst = null;
         Connection connection = null;
         try {
-        	connection = dataSource.getConnection();
+        	connection = cronConfig.getDataSource().getConnection();
             pst = connection.prepareStatement(UPDATE_TIME_SQL);
 
-            pst.setTimestamp(1, lastRunTime);
-            pst.setString(2, cronId);
+            pst.setString(1, cronId);
             pst.executeUpdate();
         } catch (Exception e) {
             logger.error("Exception occurs while reading data from database", e);
@@ -85,7 +75,7 @@ public class CronDao {
         ResultSet rst = null;
         try {
             
-            connection = dataSource.getConnection();
+            connection = cronConfig.getDataSource().getConnection();
             if (CronUtil.isEmpty(group)) {
                 String sql = SELECT_SQL + WHERE_SQL_GROUP_NULL;
                 logger.debug("[getAllCron] select cron sql :" + sql);
@@ -137,6 +127,7 @@ public class CronDao {
         Cron cron = new Cron();
         cron.setBeanName(rst.getString("bean_name"));
         cron.setMethodName(rst.getString("method_name"));
+        cron.setParameter(rst.getString("parameter"));
         cron.setCronExpression(rst.getString("cron_expression"));
         cron.setCronDesc(rst.getString("cron_desc"));
         cron.setId(rst.getString("id"));

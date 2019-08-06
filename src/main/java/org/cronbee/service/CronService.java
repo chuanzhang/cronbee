@@ -1,6 +1,5 @@
 package org.cronbee.service;
 
-import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
@@ -8,18 +7,17 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 
-import org.springframework.transaction.annotation.Transactional;
 
 
 import org.apache.logging.log4j.util.Strings;
+import org.cronbee.config.CronConfig;
 import org.cronbee.constant.CronConstant;
 import org.cronbee.dao.CronDao;
 import org.cronbee.dao.CronExecuteHistoryDao;
 import org.cronbee.entry.GeneralRunableImpl;
 import org.cronbee.model.Cron;
-import org.cronbee.util.ApplicationContextUtil;
+import org.cronbee.util.CronUtil;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -33,8 +31,8 @@ public class CronService {
     private static final ConcurrentHashMap<String, Cron> cronMap = new ConcurrentHashMap<String, Cron>();
     private static final ConcurrentHashMap<String, ScheduledFuture<?>> taskMap = new ConcurrentHashMap<String, ScheduledFuture<?>>();
     
-    @Value("${cron.group}")
-    private String cronGroup;
+    @Autowired
+    private CronConfig cronConfig;
     
     /**
      * 获取所有cron
@@ -43,7 +41,7 @@ public class CronService {
      */
     public List<Cron> getAllCron() {
     	
-    	return cronDao.getAllCron(cronGroup);
+    	return cronDao.getAllCron(cronConfig.getGroup());
     }
     
     /**
@@ -52,7 +50,12 @@ public class CronService {
      */
     public void addCronToMap(Cron cron) {
     	if(cron == null) return;
-    	cronMap.put(cron.getBeanName(), cron);
+    	cronMap.put(CronUtil.getTaskNamebyCron(cron), cron);
+    }
+    
+    public boolean cronExsists(Cron cron) {
+    	String taskName = CronUtil.getTaskNamebyCron(cron);
+    	return cronMap.containsKey(taskName);
     }
     
     /**
@@ -61,7 +64,7 @@ public class CronService {
      * @param future
      */
     public void addFutureToMap(String taskName, ScheduledFuture<?> future) {
-    	if(taskName == null || future == null) return;
+    	if(CronUtil.isEmpty(taskName) || future == null) return;
     	taskMap.put(taskName, future);
     }
     
@@ -117,7 +120,7 @@ public class CronService {
         	id = id + '-' + UUID.randomUUID().toString().replace("-", "");
         }
         
-        ret = cronExecuteHistoryDao.insertCronExecuteHistory(id, cron.getId(), cron.getBeanName());
+        ret = cronExecuteHistoryDao.insertCronExecuteHistory(id, cron);
         
         if(ret > 0) {
         	return id;
@@ -133,11 +136,10 @@ public class CronService {
      * @param status
      * @return
      */
-    @Transactional
-    public int updateCronExecuteHistory(String cronId,String executeId, String status) {
+    public int updateCronExecuteHistory(String cronId,String executeId, String status, String message) {
     	if(cronId == null || executeId == null || status == null) return 0;
-    	cronDao.updateLastRunTime(cronId, new Timestamp(System.currentTimeMillis()));
-    	return cronExecuteHistoryDao.updateCronExecuteHistory(executeId, status);
+    	cronDao.updateLastRunTime(cronId);
+    	return cronExecuteHistoryDao.updateCronExecuteHistory(executeId, status, message);
     }
     
     /**
@@ -145,9 +147,9 @@ public class CronService {
      * @param beanName
      * @return
      */
-    public boolean stopCron( String beanName) {
+    public boolean stopCron( String taskName) {
     	
-    	ScheduledFuture<?> future = getFutureByTaskName(beanName);
+    	ScheduledFuture<?> future = getFutureByTaskName(taskName);
     	if(future == null) return false;
     	return future.cancel(true);
     }
@@ -159,8 +161,8 @@ public class CronService {
     public void runJob(String taskName) {
     	Cron cron = getCronByTaskName(taskName);
     	if(cron != null) {
-    		Runnable task = new GeneralRunableImpl(cron.getBeanName(),cron.getMethodName());
-    		
+    		Runnable bee = new GeneralRunableImpl(cron);
+    		bee.run();
     	}
     }
 }

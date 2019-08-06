@@ -16,7 +16,14 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import org.cronbee.entry.TaskEntry;
+import org.cronbee.model.Cron;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class CronUtil {
+
+	private static final Logger logger = LoggerFactory.getLogger(CronUtil.class);
     
     private static Pattern p = Pattern.compile("^(10\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|192\\.168\\.)");
     
@@ -30,15 +37,30 @@ public class CronUtil {
     }
     
     
+    public static String getLocalIp(){
+    	try {
+    		return InetAddress.getLocalHost().getHostAddress();
+    	}catch(Exception ex) {
+    		logger.error("get local ip address error:",ex);
+    	}
+    	return "";
+    }
+    
     /**
      * 根据方法生成一个任务名
      * @param beanName
      * @param methodName
      * @return
      */
-    public static String getTaskName(String beanName, String methodName) {
+    public static String getTaskName(String beanName, String methodName, String parameter) {
     	if(beanName == null || methodName == null) return null;
-    	return beanName + "." + methodName;
+    	if(parameter == null) parameter = "";
+    	return beanName + "." + methodName +"(" + parameter + ")";
+    }
+    
+    public static String getTaskNamebyCron(Cron cron) {
+    	if(cron == null) return null;
+    	return getTaskName(cron.getBeanName(),cron.getMethodName(),cron.getParameter());
     }
     
     /**

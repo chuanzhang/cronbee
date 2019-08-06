@@ -4,37 +4,25 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
-import javax.sql.DataSource;
-
+import org.cronbee.config.CronConfig;
+import org.cronbee.model.Cron;
+import org.cronbee.util.CronUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 
 @Component
 public class CronExecuteHistoryDao {
-    private final String UPDATE_SQL = "update tb_cron_execute_history set status =? where id=?";
+    private final String UPDATE_SQL = "update tb_cron_execute_history set status =?, message=? where id=?";
     
-    private final String INSERT_SQL = "insert into tb_cron_execute_history (id, cron_id,bean_name) values (?,?,?)";
+    private final String INSERT_SQL = "insert into tb_cron_execute_history (id, cron_id,task_name) values (?,?,?)";
     
     private static final Logger logger = LoggerFactory.getLogger(CronExecuteHistoryDao.class);
     
-    private DataSource dataSource;
-    
-    public CronExecuteHistoryDao(DataSource dataSource) {
-
-        this.dataSource = dataSource;
-    }
-    
-    /**
-     * 获取数据库连接
-     * 
-     * @return
-     */
-    public DataSource getDataSource() {
-
-        return dataSource;
-    }
+    @Autowired
+    private CronConfig cronConfig;
     
     /**
      * 更新执行记录
@@ -43,16 +31,17 @@ public class CronExecuteHistoryDao {
      * @param id
      * @return
      */
-    public int updateCronExecuteHistory(String id, String status) {
+    public int updateCronExecuteHistory(String id, String status,String message) {
 
         PreparedStatement pst = null;
         Connection conn = null;
         int ret = 0;
         try {
-            conn = this.dataSource.getConnection();
+            conn = cronConfig.getDataSource().getConnection();
             pst = conn.prepareStatement(UPDATE_SQL);
             pst.setString(1, status);
-            pst.setString(2, id);
+            pst.setString(2, message);
+            pst.setString(3, id);
             ret = pst.executeUpdate();
             
         } catch (Exception e) {
@@ -84,17 +73,17 @@ public class CronExecuteHistoryDao {
      * @param id
      * @return
      */
-    public int insertCronExecuteHistory(String id, String cronId, String beanName) {
+    public int insertCronExecuteHistory(String id, Cron cron) {
 
         PreparedStatement pst = null;
         Connection conn = null;
         int ret = 0;
         try {
-            conn = this.dataSource.getConnection();
+            conn = this.cronConfig.getDataSource().getConnection();
             pst = conn.prepareStatement(INSERT_SQL);
             pst.setString(1, id);
-            pst.setString(2, cronId);
-            pst.setString(3, beanName);
+            pst.setString(2, cron.getId());
+            pst.setString(3, CronUtil.getTaskNamebyCron(cron));
             ret = pst.executeUpdate();
             
         } catch (Exception e) {
